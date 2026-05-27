@@ -1,7 +1,26 @@
 import axios from 'axios';
 
 let cache = { data: [], ts: 0 };
-const CACHE_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_MS = 5 * 60 * 1000;
+
+function parseCsvLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
 
 export async function fetchFaq() {
   const url = process.env.GOOGLE_SHEETS_CSV_URL;
@@ -18,11 +37,11 @@ export async function fetchFaq() {
     const faqs = [];
 
     for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(',');
-      if (cols.length >= 2) {
+      const cols = parseCsvLine(lines[i]);
+      if (cols.length >= 2 && cols[0]) {
         faqs.push({
-          pergunta: (cols[0] || '').trim().toLowerCase(),
-          resposta: (cols[1] || '').trim()
+          pergunta: cols[0].toLowerCase(),
+          resposta: cols[1] || ''
         });
       }
     }
@@ -31,7 +50,7 @@ export async function fetchFaq() {
     return faqs;
   } catch (e) {
     console.error('Erro ao buscar Google Sheets:', e.message);
-    return cache.data; // return old cache if fail
+    return cache.data;
   }
 }
 
