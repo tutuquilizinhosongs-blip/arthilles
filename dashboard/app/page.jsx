@@ -9,8 +9,13 @@ export default function ArthillesDashboard() {
   const [email, setEmail] = useState('admin@arthilles.local');
   const [password, setPassword] = useState('');
   const [activeTab, setActiveTab] = useState('status');
-  const [data, setData] = useState({ clients: [], messages: [], appointments: [], unknown: [], status: null });
+  const [data, setData] = useState({ clients: [], messages: [], appointments: [], unknown: [], status: null, whatsapp: null });
   const [loading, setLoading] = useState(false);
+
+  // WhatsApp form state (Opção A)
+  const [waForm, setWaForm] = useState({ api_url: '', api_key: '', instance_name: '' });
+  const [waSaving, setWaSaving] = useState(false);
+  const [waMessage, setWaMessage] = useState('');
 
   async function login() {
     setLoading(true);
@@ -35,14 +40,48 @@ export default function ArthillesDashboard() {
 
   async function loadAll(currentToken = token) {
     const headers = { Authorization: `Bearer ${currentToken}` };
-    const [clients, messages, appointments, unknown, status] = await Promise.all([
+    const [clients, messages, appointments, unknown, status, whatsapp] = await Promise.all([
       fetch(`${API}/clients`, { headers }).then(r => r.json()),
       fetch(`${API}/messages`, { headers }).then(r => r.json()),
       fetch(`${API}/appointments`, { headers }).then(r => r.json()),
       fetch(`${API}/faq/unknown`, { headers }).then(r => r.json()),
-      fetch(`${API}/status`).then(r => r.json())
+      fetch(`${API}/status`).then(r => r.json()),
+      fetch(`${API}/evolution/settings`, { headers }).then(r => r.json()).catch(() => null)
     ]);
-    setData({ clients, messages, appointments, unknown, status });
+    setData({ clients, messages, appointments, unknown, status, whatsapp });
+
+    // Preenche o formulário com dados salvos
+    if (whatsapp) {
+      setWaForm({
+        api_url: whatsapp.api_url || '',
+        api_key: '', // nunca preenchemos a key por segurança
+        instance_name: whatsapp.instance_name || ''
+      });
+    }
+  }
+
+  async function saveWhatsAppSettings() {
+    setWaSaving(true);
+    setWaMessage('');
+    try {
+      const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+      const res = await fetch(`${API}/evolution/settings`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(waForm)
+      });
+      const json = await res.json();
+
+      if (json.success || json.api_url) {
+        setWaMessage('Configurações salvas com sucesso!');
+        await loadAll();
+      } else {
+        setWaMessage('Erro: ' + (json.error || 'Não foi possível salvar'));
+      }
+    } catch (e) {
+      setWaMessage('Erro de conexão ao salvar');
+    }
+    setWaSaving(false);
   }
 
   if (!token) {
@@ -74,13 +113,14 @@ export default function ArthillesDashboard() {
 
       <div className="container">
         <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
-          {['status', 'clients', 'messages', 'appointments', 'unknown'].map(tab => (
+          {['status', 'clients', 'messages', 'appointments', 'unknown', 'whatsapp'].map(tab => (
             <button key={tab} className={`tab ${activeTab === tab ? 'active' : ''}`} onClick={() => setActiveTab(tab)}>
               {tab === 'status' && 'Status'}
               {tab === 'clients' && 'Clientes'}
               {tab === 'messages' && 'Mensagens'}
               {tab === 'appointments' && 'Agendamentos'}
               {tab === 'unknown' && 'Dúvidas Pendentes'}
+              {tab === 'whatsapp' && 'WhatsApp'}
             </button>
           ))}
           <button onClick={() => loadAll()} style={{ marginLeft: 'auto' }}>Atualizar</button>
@@ -165,6 +205,68 @@ export default function ArthillesDashboard() {
               </tbody>
             </table>
             <p style={{ marginTop: 16, color: '#666' }}>Essas perguntas não tiveram resposta automática e foram salvas para atendimento humano.</p>
+          </div>
+        )}
+
+        {/* === NOVA ABA WHATSAPP (Opção A) === */}
+        {activeTab === 'whatsapp' && (
+          <div className="card">
+            <h3>Conexão com WhatsApp (Evolution API)</h3>
+            <p style={{ color: '#555', marginBottom: 16 }}>
+              Preencha as credenciais da sua Evolution API abaixo. As configurações ficam salvas no banco e o sistema continua funcionando com variáveis de ambiente como fallback.
+            </p>
+
+            <div style={{ display: 'grid', gap: 12, maxWidth: 520 }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Evolution API URL</label>
+                <input
+                  value={waForm.api_url}
+                  onChange={e => setWaForm({ ...waForm, api_url: e.target.value })}
+                  placeholder="https://sua-evolution.com"
+                  style={{ width: '100%' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Evolution API Key</label>
+                <input
+                  type="password"
+                  value={waForm.api_key}
+                  onChange={e => setWaForm({ ...waForm, api_key: e.target.value })}
+                  placeholder="Deixe em branco para manter a key atual"
+                  style={{ width: '100%' }}
+                />
+              />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Nome da Instância</label>
+                <input
+                  value={waForm.instance_name}
+                  onChange={e => setWaForm({ ...waForm, instance_name: e.target.value })}
+                  placeholder="arthilles-demo"
+                  style={{ width: '100%' }}
+                />
+              </div>
+
+              <button onClick={saveWhatsAppSettings} disabled={waSaving} style={{ marginTop: 8 }}>
+                {waSaving ? 'Salvando...' : 'Salvar Configurações do WhatsApp'}
+              </button>
+
+              {waMessage && <p style={{ color: waMessage.includes('sucesso') ? 'green' : 'red' }}>{waMessage}</p>}
+            </div>
+
+            <hr style={{ margin: '24px 0' }} />
+
+            <div>
+              <strong>Status atual:</strong>
+              <pre style={{ background: '#f8f8f8', padding: 12, marginTop: 8, fontSize: 13 }}>
+                {JSON.stringify(data.status?.evolution, null, 2)}
+              </pre>
+              <p style={{ fontSize: 12, color: '#666' }}>
+                O sistema usa primeiro as credenciais salvas aqui. Se não houver, usa as variáveis de ambiente do Railway.
+              </p>
+            </div>
           </div>
         )}
       </div>
