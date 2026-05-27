@@ -1,0 +1,14 @@
+* { box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; margin: 0; background: #f8f9fa; color: #222; }
+.container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+header { background: #111; color: white; padding: 16px 0; margin-bottom: 24px; }
+nav { display: flex; gap: 16px; }
+.card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 10px; text-align: left; border-bottom: 1px solid #eee; }
+input, button { padding: 10px; border: 1px solid #ccc; border-radius: 6px; }
+button { background: #111; color: white; cursor: pointer; }
+button:hover { background: #333; }
+.tab { padding: 8px 16px; border: none; background: #eee; cursor: pointer; }
+.tab.active { background: #111; color: white; }
+.status-ok { color: green; font-weight: bold; }
