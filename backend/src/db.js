@@ -73,3 +73,32 @@ export async function upsertSession(phone, state, data = {}) {
       updated_at: new Date().toISOString()
     }, { onConflict: 'company_id,phone' });
 }
+
+// === Evolution Settings (Opção A) ===
+export async function getEvolutionSettings() {
+  const { data, error } = await supabase
+    .from('evolution_settings')
+    .select('*')
+    .eq('company_id', COMPANY_ID)
+    .maybeSingle();
+
+  if (error) return null;
+  return data;
+}
+
+export async function saveEvolutionSettings({ api_url, api_key, instance_name }) {
+  const { data, error } = await supabase
+    .from('evolution_settings')
+    .upsert({
+      company_id: COMPANY_ID,
+      api_url: api_url || null,
+      api_key: api_key || null,
+      instance_name: instance_name || null,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'company_id' })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
