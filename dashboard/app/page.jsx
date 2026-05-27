@@ -12,10 +12,15 @@ export default function ArthillesDashboard() {
   const [data, setData] = useState({ clients: [], messages: [], appointments: [], unknown: [], status: null, whatsapp: null });
   const [loading, setLoading] = useState(false);
 
-  // WhatsApp form state (Opção A)
+  // WhatsApp form state
   const [waForm, setWaForm] = useState({ api_url: '', api_key: '', instance_name: '' });
   const [waSaving, setWaSaving] = useState(false);
   const [waMessage, setWaMessage] = useState('');
+
+  // WhatsApp actions state
+  const [waLoading, setWaLoading] = useState({ instance: false, qrcode: false, webhook: false });
+  const [qrCode, setQrCode] = useState(null);
+  const [connectionStatus, setConnectionStatus] = useState('disconnected');
 
   async function login() {
     setLoading(true);
@@ -48,15 +53,33 @@ export default function ArthillesDashboard() {
       fetch(`${API}/status`).then(r => r.json()),
       fetch(`${API}/evolution/settings`, { headers }).then(r => r.json()).catch(() => null)
     ]);
+
     setData({ clients, messages, appointments, unknown, status, whatsapp });
 
-    // Preenche o formulário com dados salvos
     if (whatsapp) {
       setWaForm({
         api_url: whatsapp.api_url || '',
-        api_key: '', // nunca preenchemos a key por segurança
+        api_key: '',
         instance_name: whatsapp.instance_name || ''
       });
+    }
+
+    // Atualiza status visual da conexão
+    updateConnectionVisual(status?.evolution);
+  }
+
+  function updateConnectionVisual(evolutionStatus) {
+    if (!evolutionStatus) {
+      setConnectionStatus('disconnected');
+      return;
+    }
+
+    if (evolutionStatus.connected === true) {
+      setConnectionStatus('connected');
+    } else if (evolutionStatus.configured) {
+      setConnectionStatus('waiting_qr');
+    } else {
+      setConnectionStatus('disconnected');
     }
   }
 
@@ -73,7 +96,7 @@ export default function ArthillesDashboard() {
       const json = await res.json();
 
       if (json.success || json.api_url) {
-        setWaMessage('Configurações salvas com sucesso!');
+        setWaMessage('Credenciais salvas com sucesso!');
         await loadAll();
       } else {
         setWaMessage('Erro: ' + (json.error || 'Não foi possível salvar'));
@@ -82,6 +105,79 @@ export default function ArthillesDashboard() {
       setWaMessage('Erro de conexão ao salvar');
     }
     setWaSaving(false);
+  }
+
+  // === Ações de Conexão WhatsApp ===
+
+  async function createInstance() {
+    setWaLoading(prev => ({ ...prev, instance: true }));
+    setWaMessage('');
+    setQrCode(null);
+
+    try {
+      const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+      const res = await fetch(`${API}/evolution/instance`, { method: 'POST', headers });
+      const json = await res.json();
+
+      if (json.success) {
+        setWaMessage('Instância criada com sucesso!');
+        await loadAll();
+      } else {
+        setWaMessage('Erro: ' + (json.error || 'Falha ao criar instância'));
+      }
+    } catch (e) {
+      setWaMessage('Erro ao criar instância: ' + e.message);
+    }
+
+    setWaLoading(prev => ({ ...prev, instance: false }));
+  }
+
+  async function generateQRCode() {
+    setWaLoading(prev => ({ ...prev, qrcode: true }));
+    setWaMessage('');
+    setQrCode(null);
+
+    try {
+      const headers = { Authorization: `Bearer ${token}` };
+      const res = await fetch(`${API}/evolution/qrcode`, { headers });
+      const json = await res.json();
+
+      if (json.success && json.base64) {
+        // Aceita tanto data URL quanto base64 puro
+        const base64 = json.base64.startsWith('data:') ? json.base64 : `data:image/png;base64,${json.base64}`;
+        setQrCode(base64);
+        setWaMessage('QR Code gerado. Escaneie com o WhatsApp.');
+        setConnectionStatus('waiting_qr');
+      } else {
+        setWaMessage('Erro: ' + (json.error || 'Não foi possível gerar QR Code'));
+      }
+    } catch (e) {
+      setWaMessage('Erro ao buscar QR Code: ' + e.message);
+    }
+
+    setWaLoading(prev => ({ ...prev, qrcode: false }));
+  }
+
+  async function configureWebhook() {
+    setWaLoading(prev => ({ ...prev, webhook: true }));
+    setWaMessage('');
+
+    try {
+      const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+      const res = await fetch(`${API}/evolution/webhook`, { method: 'POST', headers });
+      const json = await res.json();
+
+      if (json.success) {
+        setWaMessage('Webhook configurado com sucesso!');
+        await loadAll();
+      } else {
+        setWaMessage('Erro: ' + (json.error || 'Falha ao configurar webhook'));
+      }
+    } catch (e) {
+      setWaMessage('Erro ao configurar webhook: ' + e.message);
+    }
+
+    setWaLoading(prev => ({ ...prev, webhook: false }));
   }
 
   if (!token) {
@@ -132,7 +228,6 @@ export default function ArthillesDashboard() {
             <pre style={{ background: '#f4f4f4', padding: 16, borderRadius: 6, overflow: 'auto' }}>
               {JSON.stringify(data.status, null, 2)}
             </pre>
-            <p><strong>Dica:</strong> Se Google Sheets estiver com erro, verifique a variável GOOGLE_SHEETS_CSV_URL.</p>
           </div>
         )}
 
@@ -204,68 +299,98 @@ export default function ArthillesDashboard() {
                 ))}
               </tbody>
             </table>
-            <p style={{ marginTop: 16, color: '#666' }}>Essas perguntas não tiveram resposta automática e foram salvas para atendimento humano.</p>
           </div>
         )}
 
-        {/* === NOVA ABA WHATSAPP (Opção A) === */}
+        {/* === ABA WHATSAPP COMPLETA === */}
         {activeTab === 'whatsapp' && (
           <div className="card">
             <h3>Conexão com WhatsApp (Evolution API)</h3>
-            <p style={{ color: '#555', marginBottom: 16 }}>
-              Preencha as credenciais da sua Evolution API abaixo. As configurações ficam salvas no banco e o sistema continua funcionando com variáveis de ambiente como fallback.
-            </p>
 
-            <div style={{ display: 'grid', gap: 12, maxWidth: 520 }}>
-              <div>
-                <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Evolution API URL</label>
-                <input
-                  value={waForm.api_url}
-                  onChange={e => setWaForm({ ...waForm, api_url: e.target.value })}
-                  placeholder="https://sua-evolution.com"
-                  style={{ width: '100%' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Evolution API Key</label>
-                <input
-                  type="password"
-                  value={waForm.api_key}
-                  onChange={e => setWaForm({ ...waForm, api_key: e.target.value })}
-                  placeholder="Deixe em branco para manter a key atual"
-                  style={{ width: '100%' }}
-                />
-              />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Nome da Instância</label>
-                <input
-                  value={waForm.instance_name}
-                  onChange={e => setWaForm({ ...waForm, instance_name: e.target.value })}
-                  placeholder="arthilles-demo"
-                  style={{ width: '100%' }}
-                />
-              </div>
-
-              <button onClick={saveWhatsAppSettings} disabled={waSaving} style={{ marginTop: 8 }}>
-                {waSaving ? 'Salvando...' : 'Salvar Configurações do WhatsApp'}
-              </button>
-
-              {waMessage && <p style={{ color: waMessage.includes('sucesso') ? 'green' : 'red' }}>{waMessage}</p>}
+            {/* Status visual */}
+            <div style={{ marginBottom: 20 }}>
+              <strong>Status da conexão: </strong>
+              <span style={{
+                padding: '4px 12px',
+                borderRadius: '9999px',
+                fontSize: '13px',
+                fontWeight: 'bold',
+                background: connectionStatus === 'connected' ? '#d1fae5' : connectionStatus === 'waiting_qr' ? '#fef3c7' : '#fee2e2',
+                color: connectionStatus === 'connected' ? '#065f46' : connectionStatus === 'waiting_qr' ? '#92400e' : '#991b1b'
+              }}>
+                {connectionStatus === 'connected' && '✓ Conectado'}
+                {connectionStatus === 'waiting_qr' && '⏳ Aguardando QR Code'}
+                {connectionStatus === 'disconnected' && '✗ Desconectado'}
+              </span>
             </div>
 
-            <hr style={{ margin: '24px 0' }} />
+            {/* Formulário de credenciais */}
+            <div style={{ display: 'grid', gap: 12, maxWidth: 520, marginBottom: 24 }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Evolution API URL</label>
+                <input value={waForm.api_url} onChange={e => setWaForm({ ...waForm, api_url: e.target.value })} placeholder="https://sua-evolution.com" style={{ width: '100%' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Evolution API Key</label>
+                <input type="password" value={waForm.api_key} onChange={e => setWaForm({ ...waForm, api_key: e.target.value })} placeholder="Cole sua chave (não é exibida após salvar)" style={{ width: '100%' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: 4, fontSize: 13 }}>Nome da Instância</label>
+                <input value={waForm.instance_name} onChange={e => setWaForm({ ...waForm, instance_name: e.target.value })} placeholder="arthilles-demo" style={{ width: '100%' }} />
+              </div>
 
-            <div>
-              <strong>Status atual:</strong>
-              <pre style={{ background: '#f8f8f8', padding: 12, marginTop: 8, fontSize: 13 }}>
-                {JSON.stringify(data.status?.evolution, null, 2)}
-              </pre>
-              <p style={{ fontSize: 12, color: '#666' }}>
-                O sistema usa primeiro as credenciais salvas aqui. Se não houver, usa as variáveis de ambiente do Railway.
-              </p>
+              <button onClick={saveWhatsAppSettings} disabled={waSaving}>
+                {waSaving ? 'Salvando...' : 'Salvar Credenciais'}
+              </button>
+              {waMessage && <p style={{ color: waMessage.includes('sucesso') ? 'green' : 'red', fontSize: 13 }}>{waMessage}</p>}
+            </div>
+
+            <hr style={{ margin: '16px 0' }} />
+
+            {/* Botões de ação */}
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
+              <button
+                onClick={createInstance}
+                disabled={waLoading.instance || !waForm.api_url}
+                style={{ padding: '10px 18px' }}
+              >
+                {waLoading.instance ? 'Criando...' : 'Criar Instância'}
+              </button>
+
+              <button
+                onClick={generateQRCode}
+                disabled={waLoading.qrcode || !waForm.api_url}
+                style={{ padding: '10px 18px' }}
+              >
+                {waLoading.qrcode ? 'Gerando...' : 'Gerar QR Code'}
+              </button>
+
+              <button
+                onClick={configureWebhook}
+                disabled={waLoading.webhook || !waForm.api_url}
+                style={{ padding: '10px 18px' }}
+              >
+                {waLoading.webhook ? 'Configurando...' : 'Configurar Webhook'}
+              </button>
+            </div>
+
+            {/* QR Code */}
+            {qrCode && (
+              <div style={{ marginTop: 16, textAlign: 'center' }}>
+                <p style={{ marginBottom: 8, fontWeight: 'bold' }}>Escaneie este QR Code com o WhatsApp:</p>
+                <img
+                  src={qrCode}
+                  alt="QR Code WhatsApp"
+                  style={{ maxWidth: '280px', border: '1px solid #ddd', padding: 8, background: 'white' }}
+                />
+                <p style={{ fontSize: 12, color: '#666', marginTop: 8 }}>
+                  Após escanear, clique em "Atualizar" para verificar a conexão.
+                </p>
+              </div>
+            )}
+
+            <div style={{ marginTop: 20, fontSize: 12, color: '#666' }}>
+              Dica: Após criar a instância e escanear o QR, clique em "Configurar Webhook" para que o bot comece a receber mensagens automaticamente.
             </div>
           </div>
         )}
