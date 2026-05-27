@@ -3,7 +3,7 @@ import { handleIncomingMessage } from './bot.js';
 import { supabase, COMPANY_ID, getOrCreateClient, saveEvolutionSettings } from './db.js';
 import { login, verifyToken } from './auth.js';
 import { findAnswer } from './sheets.js';
-import { getEvolutionConfig, evolutionHeaders } from './evolution.js';
+import { getEvolutionConfig, evolutionHeaders, createEvolutionInstance, getEvolutionQRCode, setEvolutionWebhook } from './evolution.js';
 
 export const router = express.Router();
 
@@ -172,6 +172,75 @@ router.get('/evolution/status', requireAuth, async (req, res) => {
       source: config.source,
       error: 'Não foi possível conectar com a Evolution API'
     });
+  }
+});
+
+// === Ações de Conexão WhatsApp ===
+
+// Criar instância na Evolution API
+router.post('/evolution/instance', requireAuth, async (req, res) => {
+  const config = await getEvolutionConfig();
+
+  if (!config.hasCredentials) {
+    return res.status(400).json({ error: 'Credenciais da Evolution não configuradas' });
+  }
+
+  try {
+    const result = await createEvolutionInstance(config);
+
+    // Se a criação foi bem sucedida e não tínhamos nome salvo, salvamos
+    const settings = await (await import('./db.js')).getEvolutionSettings();
+    if (!settings?.instance_name && config.instance) {
+      await saveEvolutionSettings({
+        api_url: config.apiUrl,
+        api_key: config.apiKey,
+        instance_name: config.instance
+      });
+    }
+
+    res.json({ success: true, message: 'Instância criada com sucesso', data: result.data });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Gerar / buscar QR Code
+router.get('/evolution/qrcode', requireAuth, async (req, res) => {
+  const config = await getEvolutionConfig();
+
+  if (!config.hasCredentials) {
+    return res.status(400).json({ error: 'Credenciais da Evolution não configuradas' });
+  }
+
+  try {
+    const result = await getEvolutionQRCode(config);
+    res.json({ success: true, base64: result.base64 });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Configurar webhook automaticamente
+router.post('/evolution/webhook', requireAuth, async (req, res) => {
+  const config = await getEvolutionConfig();
+  const backendUrl = process.env.BACKEND_PUBLIC_URL;
+
+  if (!config.hasCredentials) {
+    return res.status(400).json({ error: 'Credenciais da Evolution não configuradas' });
+  }
+  if (!backendUrl) {
+    return res.status(400).json({ error: 'BACKEND_PUBLIC_URL não está configurado no Railway' });
+  }
+
+  try {
+    const result = await setEvolutionWebhook(config, backendUrl);
+    res.json({
+      success: true,
+      message: 'Webhook configurado com sucesso',
+      webhookUrl: result.webhookUrl
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
