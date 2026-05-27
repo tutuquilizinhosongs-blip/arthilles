@@ -1,9 +1,8 @@
--- Arthilles - Simple WhatsApp Bot MVP
--- Run this in Supabase SQL Editor (free plan)
+-- Arthilles - Simple WhatsApp Bot MVP (v1)
+-- Cole este arquivo inteiro no SQL Editor do Supabase e execute.
 
 create extension if not exists "pgcrypto";
 
--- Companies (simple - one company for MVP)
 create table if not exists public.companies (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -11,7 +10,6 @@ create table if not exists public.companies (
   created_at timestamptz default now()
 );
 
--- Admin users
 create table if not exists public.app_users (
   id uuid primary key default gen_random_uuid(),
   company_id uuid references public.companies(id) on delete cascade,
@@ -21,7 +19,6 @@ create table if not exists public.app_users (
   created_at timestamptz default now()
 );
 
--- Clients who talked to the bot
 create table if not exists public.clients (
   id uuid primary key default gen_random_uuid(),
   company_id uuid references public.companies(id),
@@ -31,7 +28,6 @@ create table if not exists public.clients (
   unique (company_id, phone)
 );
 
--- All messages (inbound + outbound)
 create table if not exists public.messages (
   id uuid primary key default gen_random_uuid(),
   company_id uuid references public.companies(id),
@@ -41,7 +37,6 @@ create table if not exists public.messages (
   created_at timestamptz default now()
 );
 
--- Appointments collected by the bot
 create table if not exists public.appointments (
   id uuid primary key default gen_random_uuid(),
   company_id uuid references public.companies(id),
@@ -53,7 +48,6 @@ create table if not exists public.appointments (
   created_at timestamptz default now()
 );
 
--- Unknown questions (for human follow-up)
 create table if not exists public.unknown_questions (
   id uuid primary key default gen_random_uuid(),
   company_id uuid references public.companies(id),
@@ -63,7 +57,6 @@ create table if not exists public.unknown_questions (
   created_at timestamptz default now()
 );
 
--- Simple bot session state (for multi-turn like appointment collection)
 create table if not exists public.conversation_sessions (
   id uuid primary key default gen_random_uuid(),
   company_id uuid references public.companies(id),
@@ -74,24 +67,14 @@ create table if not exists public.conversation_sessions (
   unique (company_id, phone)
 );
 
--- Seed one demo company
 insert into public.companies (id, name, slug)
 values ('00000000-0000-0000-0000-000000000001', 'Minha Empresa', 'minha-empresa')
 on conflict (id) do nothing;
 
--- Seed admin (password will be set via AUTH_SECRET + ADMIN_PASSWORD in backend)
--- You will create the real hash via the backend or update manually after first deploy
-insert into public.app_users (company_id, email, password_hash, role)
-values (
-  '00000000-0000-0000-0000-000000000001',
-  'admin@arthilles.local',
-  'REPLACE_AFTER_DEPLOY',
-  'admin'
-)
-on conflict (email) do nothing;
+-- O admin será criado no primeiro login usando ADMIN_EMAIL + ADMIN_PASSWORD do .env
+-- (o backend faz a comparação direta no MVP para máxima simplicidade)
 
--- Basic indexes
 create index if not exists idx_messages_company on public.messages(company_id, created_at desc);
 create index if not exists idx_appointments_company on public.appointments(company_id, created_at desc);
 create index if not exists idx_unknown_company on public.unknown_questions(company_id, created_at desc);
-create index if not exists idx_sessions_phone on public.conversation_sessions(company_id, phone);
+create index if not exists idx_sessions on public.conversation_sessions(company_id, phone);

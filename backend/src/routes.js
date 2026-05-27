@@ -1,6 +1,6 @@
 import express from 'express';
 import { handleIncomingMessage } from './bot.js';
-import { supabase, COMPANY_ID } from './db.js';
+import { supabase, COMPANY_ID, getOrCreateClient } from './db.js';
 import { login, verifyToken } from './auth.js';
 import { findAnswer } from './sheets.js';
 
@@ -26,7 +26,7 @@ router.get('/status', async (req, res) => {
   } catch {}
 
   try {
-    const faqs = await findAnswer('teste');
+    await findAnswer('teste');
     status.sheets = 'ok';
   } catch {
     status.sheets = 'error (verifique GOOGLE_SHEETS_CSV_URL)';
@@ -119,7 +119,7 @@ router.get('/appointments', requireAuth, async (req, res) => {
 router.post('/appointments', requireAuth, async (req, res) => {
   const { service, preferred_date, preferred_time, client_phone, client_name } = req.body;
 
-  const client = await getOrCreateClientFromPhone(client_phone, client_name); // helper below
+  const client = await getOrCreateClient(client_phone, client_name);
 
   const { data, error } = await supabase.from('appointments').insert({
     company_id: COMPANY_ID,
@@ -154,18 +154,3 @@ router.get('/messages', requireAuth, async (req, res) => {
     .limit(100);
   res.json(data || []);
 });
-
-// Helper (duplicated for simplicity)
-async function getOrCreateClientFromPhone(phone, name) {
-  const { data } = await supabase
-    .from('clients')
-    .select('*')
-    .eq('company_id', COMPANY_ID)
-    .eq('phone', phone)
-    .maybeSingle();
-  if (data) return data;
-  const { data: created } = await supabase.from('clients').insert({
-    company_id: COMPANY_ID, phone, full_name: name
-  }).select().single();
-  return created;
-}
