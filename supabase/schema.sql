@@ -67,6 +67,15 @@ create table if not exists public.conversation_sessions (
   unique (company_id, phone)
 );
 
+-- Evolution API settings (Opção A - credenciais salvas no painel)
+create table if not exists public.evolution_settings (
+  company_id uuid primary key references public.companies(id) on delete cascade,
+  api_url text,
+  api_key text,
+  instance_name text,
+  updated_at timestamptz default now()
+);
+
 insert into public.companies (id, name, slug)
 values ('00000000-0000-0000-0000-000000000001', 'Minha Empresa', 'minha-empresa')
 on conflict (id) do nothing;
