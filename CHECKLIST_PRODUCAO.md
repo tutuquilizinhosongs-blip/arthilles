@@ -15,7 +15,7 @@ Siga esta lista em ordem. Não pule etapas.
 ## 3. Railway (Backend)
 - [ ] Conectar repositório
 - [ ] Root Directory = `backend`
-- [ ] Start Command = `npm start` (ou deixar Railway detectar)
+- [ ] Start Command = `npm start`
 - [ ] Adicionar TODAS as variáveis do `.env.example`
 - [ ] Fazer Deploy
 - [ ] Copiar URL pública gerada
@@ -26,15 +26,18 @@ Siga esta lista em ordem. Não pule etapas.
 - [ ] Adicionar variável `NEXT_PUBLIC_API_URL` com a URL do Railway
 - [ ] Deploy
 
-## 5. Testes Básicos
+## 5. Configurar WhatsApp (Novo - Opção A)
+- [ ] Após deploy, acesse o painel
+- [ ] Vá na aba **WhatsApp**
+- [ ] Cole as credenciais da sua Evolution API (URL, Key, Instance Name)
+- [ ] Clique em "Salvar Configurações do WhatsApp"
+- [ ] (Opcional) Use o botão de status para testar a conexão
+
+## 6. Testes Básicos
 - [ ] Abrir /health do backend → deve retornar ok
 - [ ] Fazer login no dashboard
 - [ ] Ver abas carregando sem erro
 - [ ] Testar uma pergunta da planilha no WhatsApp
 - [ ] Testar pergunta desconhecida (deve cair no fallback)
-
-## 6. Evolution API
-- [ ] Configurar webhook apontando para o backend
-- [ ] Testar envio e recebimento de mensagem
 
 Pronto. Sistema operacional sem custo mensal.
