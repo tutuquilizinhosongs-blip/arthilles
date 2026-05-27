@@ -1,6 +1,6 @@
 import express from 'express';
 import { handleIncomingMessage } from './bot.js';
-import { supabase, COMPANY_ID, getOrCreateClient } from './db.js';
+import { supabase, COMPANY_ID, getOrCreateClient, saveEvolutionSettings } from './db.js';
 import { login, verifyToken } from './auth.js';
 import { findAnswer } from './sheets.js';
 import { getEvolutionConfig, evolutionHeaders } from './evolution.js';
@@ -87,8 +87,15 @@ router.post('/webhook/evolution', async (req, res) => {
   res.json({ ok: true, reply });
 });
 
-// === Evolution Settings (Opção A - protegido) ===
+// Simple login
+router.post('/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  const user = await login(email, password);
+  if (!user) return res.status(401).json({ error: 'Credenciais inválidas' });
+  res.json(user);
+});
 
+// === Middleware de autenticação ===
 function requireAuth(req, res, next) {
   const token = req.headers.authorization?.replace('Bearer ', '');
   const user = verifyToken(token);
@@ -97,7 +104,9 @@ function requireAuth(req, res, next) {
   next();
 }
 
-// Busca configurações salvas da Evolution
+// === Evolution Settings (Opção A) ===
+
+// Busca configurações salvas da Evolution (não retorna a api_key)
 router.get('/evolution/settings', requireAuth, async (req, res) => {
   const { data, error } = await supabase
     .from('evolution_settings')
@@ -107,7 +116,6 @@ router.get('/evolution/settings', requireAuth, async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
 
-  // Nunca retorna a api_key por segurança
   res.json({
     api_url: data?.api_url || '',
     instance_name: data?.instance_name || '',
@@ -125,12 +133,7 @@ router.post('/evolution/settings', requireAuth, async (req, res) => {
   }
 
   try {
-    const saved = await (await import('./db.js')).saveEvolutionSettings({
-      api_url,
-      api_key,
-      instance_name
-    });
-
+    const saved = await saveEvolutionSettings({ api_url, api_key, instance_name });
     res.json({
       success: true,
       api_url: saved.api_url,
@@ -142,7 +145,7 @@ router.post('/evolution/settings', requireAuth, async (req, res) => {
   }
 });
 
-// Status detalhado da Evolution (usando config salva)
+// Status detalhado da Evolution
 router.get('/evolution/status', requireAuth, async (req, res) => {
   const config = await getEvolutionConfig();
 
@@ -152,8 +155,7 @@ router.get('/evolution/status', requireAuth, async (req, res) => {
 
   try {
     const response = await fetch(`${config.apiUrl}/instance/connectionState/${config.instance}`, {
-      headers: evolutionHeaders(config.apiKey),
-      timeout: 8000
+      headers: evolutionHeaders(config.apiKey)
     });
 
     const data = await response.json();
@@ -173,25 +175,8 @@ router.get('/evolution/status', requireAuth, async (req, res) => {
   }
 });
 
-// Simple login
-router.post('/auth/login', async (req, res) => {
-  const { email, password } = req.body;
-  const user = await login(email, password);
-  if (!user) return res.status(401).json({ error: 'Credenciais inválidas' });
-  res.json(user);
-});
-
-// Protected routes middleware
-function requireAuthOld(req, res, next) {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  const user = verifyToken(token);
-  if (!user) return res.status(401).json({ error: 'Não autorizado' });
-  req.user = user;
-  next();
-}
-
 // Unknown questions (for dashboard)
-router.get('/faq/unknown', requireAuthOld, async (req, res) => {
+router.get('/faq/unknown', requireAuth, async (req, res) => {
   const { data, error } = await supabase
     .from('unknown_questions')
     .select('*')
@@ -204,7 +189,7 @@ router.get('/faq/unknown', requireAuthOld, async (req, res) => {
 });
 
 // Appointments
-router.get('/appointments', requireAuthOld, async (req, res) => {
+router.get('/appointments', requireAuth, async (req, res) => {
   const { data, error } = await supabase
     .from('appointments')
     .select('*, clients(full_name, phone)')
@@ -216,7 +201,7 @@ router.get('/appointments', requireAuthOld, async (req, res) => {
   res.json(data || []);
 });
 
-router.post('/appointments', requireAuthOld, async (req, res) => {
+router.post('/appointments', requireAuth, async (req, res) => {
   const { service, preferred_date, preferred_time, client_phone, client_name } = req.body;
 
   const client = await getOrCreateClient(client_phone, client_name);
@@ -234,7 +219,7 @@ router.post('/appointments', requireAuthOld, async (req, res) => {
 });
 
 // Clients
-router.get('/clients', requireAuthOld, async (req, res) => {
+router.get('/clients', requireAuth, async (req, res) => {
   const { data } = await supabase
     .from('clients')
     .select('*')
@@ -245,7 +230,7 @@ router.get('/clients', requireAuthOld, async (req, res) => {
 });
 
 // Recent messages
-router.get('/messages', requireAuthOld, async (req, res) => {
+router.get('/messages', requireAuth, async (req, res) => {
   const { data } = await supabase
     .from('messages')
     .select('*')
